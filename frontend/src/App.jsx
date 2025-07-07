@@ -39,22 +39,31 @@ const MapComponent = ({ onLocationSelect, selectedLocation }) => {
   const mapInstanceRef = useRef(null)
   const markerRef = useRef(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [isInitialized, setIsInitialized] = useState(false)
 
   useEffect(() => {
     if (!L || !mapRef.current) return
+    if (isInitialized) {
+      return
+    }
 
     const initializeMap = () => {
-      try {
+      try
+      {
+        console.log("Initializing map...");
         // Initialize map centered on New York City
-        mapInstanceRef.current = L.map(mapRef.current, {
-          center: [40.7128, -74.006],
-          zoom: 13,
+        mapInstanceRef.current = L.map("map", {
+          // center: [40.7128, -80.0060],
+          // center: [37.681873, -121.768005],
+          center: [37.687827 ,-121.708087],
+          zoom: 14,
           zoomControl: true,
           scrollWheelZoom: true,
           doubleClickZoom: true,
           boxZoom: true,
           keyboard: true,
         })
+        console.log("init")
 
         // Add OpenStreetMap tiles
         L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -62,9 +71,21 @@ const MapComponent = ({ onLocationSelect, selectedLocation }) => {
           maxZoom: 19,
         }).addTo(mapInstanceRef.current)
 
+        // Load local filesystem file maps/map.geojson and load to leaflet
+        console.log("mapinst", mapInstanceRef.current)
+        fetch("maps/map.geojson")
+          .then((response) => response.json())
+          .then((data) => {
+            L.geoJSON(data).addTo(mapInstanceRef.current)
+          })
+
+        // set isInitialized to true
+        setIsInitialized(true)
+
         // Add click event listener
         mapInstanceRef.current.on("click", (e) => {
           const { lat, lng } = e.latlng
+          console.log("clicked", lat, lng);
 
           // Reverse geocoding to get address
           fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1`)
@@ -84,6 +105,7 @@ const MapComponent = ({ onLocationSelect, selectedLocation }) => {
 
         // Map is ready
         mapInstanceRef.current.whenReady(() => {
+          console.log("Map is ready");
           setIsLoading(false)
         })
       } catch (error) {
@@ -98,11 +120,12 @@ const MapComponent = ({ onLocationSelect, selectedLocation }) => {
     return () => {
       clearTimeout(timer)
       if (mapInstanceRef.current) {
-        mapInstanceRef.current.remove()
-        mapInstanceRef.current = null
+        // TODO: Figure out why we are doing this
+        // mapInstanceRef.current = null
+        return
       }
     }
-  }, [onLocationSelect])
+  }, [onLocationSelect, isInitialized])
 
   // Update marker when location changes
   useEffect(() => {
@@ -132,13 +155,20 @@ const MapComponent = ({ onLocationSelect, selectedLocation }) => {
   if (isLoading) {
     return (
       <div className="map-loading">
+      <div id="map">
+        <div ref={mapRef} className="map-container" />
+      </div>
         <div className="map-loading-spinner"></div>
         <div className="map-loading-text">Loading map...</div>
       </div>
     )
   }
 
-  return <div ref={mapRef} className="map-container" />
+    return (
+      <div id="map">
+        <div ref={mapRef} className="map-container" />
+      </div>
+    )
 }
 
 export default function App() {
@@ -233,9 +263,9 @@ export default function App() {
         <div className="header-content">
           <h1 className="header-title">
             <span>📍</span>
-            RideBus
+            LLLyft
           </h1>
-          <p className="header-subtitle">Connect with bus drivers instantly</p>
+          <p className="header-subtitle">Connect with LLNL bus drivers instantly</p>
         </div>
       </header>
 

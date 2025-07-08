@@ -20,4 +20,4 @@ zsh: command not found: #
 Error response from daemon: No such container: osrm_server
 c3229c04ae4db78572e1237eda5b66ee2bdfd099b6e5b253e21edb8f892fc242
 zsh: command not found: #
---- ✅ OSRM server is running. Use 'docker ps' to verify. ------  OSRM server is running. Use 'docker ps' to verify. ---
+--- ✅ OSRM server is running. Use 'docker ps' to verify. ------  OSRM server is running. Use 'docker ps' to verify. ------  OSRM server is running. Use 'docker ps' to verify. ---

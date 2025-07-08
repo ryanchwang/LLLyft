@@ -1,6 +1,5 @@
 from typing import List
 import json
-from states import AppState, BusState, Location, PickupLocation, DropoffLocation
 from .states import AppState, BusState, Location, PickupLocation, DropoffLocation
 from fastapi import FastAPI
 import uvicorn
@@ -8,7 +7,6 @@ from fastapi import WebSocket, WebSocketDisconnect
 import logging
 import asyncio
 import httpx
-from algo.bus_logic import find_optimal_bus
 from .algo.bus_logic import find_optimal_bus
 
 app = FastAPI()

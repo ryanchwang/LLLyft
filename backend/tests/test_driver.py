@@ -30,6 +30,12 @@ async def test_driver():
         data = await client.recv()
         data = json.loads(data)
         assert data == {"msg": "Next stop", "stop": [37.7749, -122.4194]}
+        while True:
+            await client.send(json.dumps({"type": "GET_NEXT"}))
+            data = await client.recv()
+            data = json.loads(data)
+            # assert data == {"msg": "Next stop", "stop": [37.7749, -122.4194]}
+            print(data)
 
 @pytest.mark.asyncio
 async def test_passenger():

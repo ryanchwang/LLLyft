@@ -1,90 +1,80 @@
 #!/bin/bash
 
-# This script automates the OSRM data preprocessing using Docker.
-# It uses an existing local OSM PBF extract and runs osrm-extract, osrm-partition, and osrm-customize.
+# OSRM Data Preprocessing Script
+# This script downloads and processes OpenStreetMap data for OSRM routing
 
-# --- Configuration ---
-# Path to your local OSM PBF file
-LOCAL_OSM_PBF_PATH="/Users/ryanwang/Documents/GitHub/LLLyft/frontend/public/maps/map.osm"
-# Name for the generated OSRM files (without .osm.pbf extension)
-# This will be the base name for files inside the DATA_DIR (e.g., map.osrm)
-MAP_BASE_NAME="map"
-# Default OSRM profile (car, bike, foot - must exist in /opt inside the Docker image)
-OSRM_PROFILE="/opt/car.lua"
-# Directory to store OSRM data files (relative to where the script is run)
+set -e  # Exit on any error
+
+# Configuration
 DATA_DIR="backend/src/algo/osrm_data"
-# OSRM backend Docker image
-OSRM_DOCKER_IMAGE="osrm/osrm-backend"
+MAP_NAME="map"
+DOCKER_IMAGE="osrm/osrm-backend"
+CUSTOM_MAP_PATH="/Users/ryanwang/Documents/GitHub/LLLyft/frontend/public/maps/map.osm"
 
-# --- Functions ---
+echo "=== OSRM Data Preprocessing ==="
 
-# Function to display error messages and exit
-handle_error() {
-    echo "ERROR: $1" >&2
+# Step 1: Create data directory if it doesn't exist
+echo "Step 1: Setting up data directory..."
+mkdir -p "$DATA_DIR"
+cd "$DATA_DIR"
+
+# Step 2: Copy and prepare custom map data
+echo "Step 2: Preparing custom map data..."
+if [ ! -f "$CUSTOM_MAP_PATH" ]; then
+    echo "ERROR: Custom map file not found at: $CUSTOM_MAP_PATH"
     exit 1
-}
-
-# Function to check if Docker is running
-check_docker() {
-    if ! docker info > /dev/null 2>&1; then
-        handle_error "Docker is not running or not accessible. Please start Docker Desktop or ensure the Docker daemon is running."
-    fi
-    echo "Docker is running."
-}
-
-# Function to run OSRM Docker command
-# Arguments are the full command to execute inside the container (e.g., "osrm-extract -p /opt/car.lua /data/map.osm")
-run_osrm_command() {
-    local osrm_full_command=("$@") # All arguments are now treated as the full command for OSRM
-
-    echo "Running OSRM command: ${osrm_full_command[0]}" # Print the first part of the command (e.g., osrm-extract)
-    echo "Docker command: docker run -t -v \"${PWD}/${DATA_DIR}:/data\" $OSRM_DOCKER_IMAGE ${osrm_full_command[@]}"
-
-    # Mount only DATA_DIR, as the PBF will be copied there first.
-    docker run -t --platform linux/amd64 \
-      -v "${PWD}/${DATA_DIR}:/data" \
-      "$OSRM_DOCKER_IMAGE" "${osrm_full_command[@]}" || handle_error "${osrm_full_command[0]} failed."
-    echo "${osrm_full_command[0]} completed successfully."
-}
-
-# --- Main Script ---
-
-echo "--- OSRM Preprocessing Script ---"
-
-# Create data directory if it doesn't exist
-mkdir -p "${DATA_DIR}" || handle_error "Failed to create data directory ${DATA_DIR}."
-echo "Data directory ${DATA_DIR} ensured."
-
-check_docker
-
-# Define the path for the PBF file *inside* the data directory
-PBF_FILE_IN_DATA_DIR="${DATA_DIR}/${MAP_BASE_NAME}.osm" # Keep the .osm extension here
-
-# Verify the local PBF file exists before copying
-if [ ! -f "${LOCAL_OSM_PBF_PATH}" ]; then
-    handle_error "Local OSM PBF file not found at: ${LOCAL_OSM_PBF_PATH}"
+else
+    echo "✓ Found custom map file: $CUSTOM_MAP_PATH"
+    echo "File size: $(ls -lh "$CUSTOM_MAP_PATH" | awk '{print $5}')"
+    
+    # Copy the custom map to our data directory
+    echo "Copying custom map to data directory..."
+    cp "$CUSTOM_MAP_PATH" "${MAP_NAME}.osm"
+    echo "✓ Map copied to: ${MAP_NAME}.osm"
 fi
-echo "Using local OSM PBF file: ${LOCAL_OSM_PBF_PATH}"
 
-# 0. Copy the OSM PBF file into the OSRM data directory
-echo "Copying ${LOCAL_OSM_PBF_PATH} to ${PBF_FILE_IN_DATA_DIR}..."
-cp "${LOCAL_OSM_PBF_PATH}" "${PBF_FILE_IN_DATA_DIR}" || handle_error "Failed to copy PBF file to data directory."
-echo "PBF file copied successfully."
+# Step 3: Extract road network
+echo "Step 3: Extracting road network..."
+docker run -t --rm \
+    -v "${PWD}:/data" \
+    "$DOCKER_IMAGE" \
+    osrm-extract -p /opt/car.lua "/data/${MAP_NAME}.osm"
 
-# The OSRM commands will now operate entirely within the /data directory inside the container.
-# The base name for all OSRM files will be map.osrm
+# Step 4: Build contraction hierarchies
+echo "Step 4: Building contraction hierarchies..."
+docker run -t --rm \
+    -v "${PWD}:/data" \
+    "$DOCKER_IMAGE" \
+    osrm-contract "/data/${MAP_NAME}.osrm"
 
-# 1. Run osrm-extract
-# Input: /data/map.osm, Output will be /data/map.osrm (implicit)
-run_osrm_command "osrm-extract" "/data/${MAP_BASE_NAME}.osm" "-p" "${OSRM_PROFILE}"
+# Step 5: Verify output files
+echo "Step 5: Verifying output files..."
+REQUIRED_FILES=(
+    "${MAP_NAME}.osrm"
+    "${MAP_NAME}.osrm.edges"
+    "${MAP_NAME}.osrm.geometry"
+    "${MAP_NAME}.osrm.hsgr"
+    "${MAP_NAME}.osrm.names"
+    "${MAP_NAME}.osrm.ramIndex"
+    "${MAP_NAME}.osrm.timestamps"
+)
 
-# 2. Run osrm-partition (for MLD)
-run_osrm_command "osrm-partition" "/data/${MAP_BASE_NAME}.osrm"
+echo "Checking for required files:"
+for file in "${REQUIRED_FILES[@]}"; do
+    if [ -f "$file" ]; then
+        echo "  ✓ $file"
+    else
+        echo "  ✗ $file (missing)"
+    fi
+done
 
-# 3. Run osrm-customize (for MLD)
-run_osrm_command "osrm-customize" "/data/${MAP_BASE_NAME}.osrm"
+echo ""
+echo "=== Preprocessing Complete ==="
+echo "Data directory: $(pwd)"
+echo "Map file: ${MAP_NAME}.osrm"
+echo ""
+echo "Next steps:"
+echo "1. Run your OSRM server startup script"
+echo "2. Test with: curl \"http://localhost:5000/trip/v1/driving/-122.4194,37.7749;-122.4105,37.8083?source=first\""
 
-echo "--- OSRM Preprocessing Complete! ---"
-echo "OSRM data files are located in: ${PWD}/${DATA_DIR}"
-echo "You can now start osrm-routed with: "
-echo "docker run -t -i -p 5000:5000 -v \"${PWD}/${DATA_DIR}:/data\" ${OSRM_DOCKER_IMAGE} osrm-routed --algorithm mld /data/${MAP_BASE_NAME}.osrm"
+cd - > /dev/null  # Return to original directory

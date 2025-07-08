@@ -4,7 +4,7 @@ from typing import List
 import logging
 
 # Note: We import the state classes from the parent directory
-from ..states import BusState, Location
+from states import BusState, Location
 
 async def get_trip_duration(
     stops: List[Location],

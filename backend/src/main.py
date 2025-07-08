@@ -8,6 +8,7 @@ import logging
 import asyncio
 import httpx
 from algo.bus_logic import find_optimal_bus
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
 
@@ -15,6 +16,19 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 OSRM_SERVER_URL = "http://localhost:5000"
+
+
+origins = [
+    "*"
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 state = AppState()
 
@@ -106,24 +120,30 @@ async def get_bus(pickup_loc: Location, dropoff_loc: Location):
         logger=logger             # Pass the logger as an argument
     )
     # Tell the bus
-    if my_bus:
-        data = {
-            "type": "RIDE_REQUEST",
-            "pickup": {
-                "latitude": pickup_loc.latitude,
-                "longitude": pickup_loc.longitude
-            },
-            # RECOMMENDED CHANGE: Add the dropoff location here
-            "dropoff": {
-                "latitude": dropoff_loc.latitude,
-                "longitude": dropoff_loc.longitude
-            }
+    data = {
+        "type": "RIDE_REQUEST",
+        "pickup": {
+            "latitude": pickup_loc.latitude,
+            "longitude": pickup_loc.longitude
+        },
+        # RECOMMENDED CHANGE: Add the dropoff location here
+        "dropoff": {
+            "latitude": dropoff_loc.latitude,
+            "longitude": dropoff_loc.longitude
         }
+    }
+
+    if my_bus:
         await my_bus.websocket.send_text(json.dumps(data))
         
         logger.info(f"Ride request sent to bus at location: {pickup_loc.latitude}, {pickup_loc.longitude}")
-        
+        # Return bus location
+        return my_bus.location
+
     else:
+        # Return first bus location
+        await buses[0].websocket.send_text(json.dumps(data))
+        return buses[0].location
         logger.warning(f"No available bus found for location: {pickup_loc.latitude}, {pickup_loc.longitude}")
 
 @app.get("/passenger/request_ride")
@@ -140,7 +160,9 @@ async def request_ride(
     dropoff_location = DropoffLocation(latitude=dropoff_lat, longitude=dropoff_lon)
 
     # FIXED: The call to get_bus now passes both locations.
-    await get_bus(pickup_location, dropoff_location)
+    location = await get_bus(pickup_location, dropoff_location)
+    print(location)
+    return location
 
 
 if __name__ == "__main__":

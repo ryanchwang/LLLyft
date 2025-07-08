@@ -123,24 +123,38 @@ body {
   height: 30px !important;
   border-radius: 50% !important;
   border: 3px solid white !important;
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3) !important;
+  /* box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3) !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
   animation: bounce 2s infinite !important;
-  position: relative !important;
+  position: relative !important; */
+}
+
+.drop-marker {
+  background: #3b82f6 !important;
+  width: 30px !important;
+  height: 30px !important;
+  border-radius: 50% !important;
+  border: 3px solid white !important;
+  /* box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  animation: bounce 2s infinite !important;
+  position: relative !important; */
 }
 
 .custom-marker::after {
   content: "" !important;
-  width: 10px !important;
+  /* width: 10px !important;
   height: 10px !important;
   background: white !important;
   border-radius: 50% !important;
   position: absolute !important;
   top: 50% !important;
   left: 50% !important;
-  transform: translate(-50%, -50%) !important;
+  transform: translate(-50%, -50%) !important; */
 }
 
 @keyframes bounce {

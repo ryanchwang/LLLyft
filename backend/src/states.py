@@ -11,6 +11,17 @@ class Location(BaseModel):
 
     def to_list(self) -> List[float]:
         return [self.latitude, self.longitude]
+    
+# --- Subclasses for Specific Roles ---
+# 1. PickupLocation inherits all attributes and methods from Location.
+class PickupLocation(Location):
+    """A specific location designated for a passenger pickup."""
+    pass
+
+# 2. DropoffLocation also inherits from Location.
+class DropoffLocation(Location):
+    """A specific location designated for a passenger dropoff."""
+    pass
 
 class BusState:
     def __init__(self, websocket: WebSocket, logger):

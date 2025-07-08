@@ -1,16 +1,20 @@
 from typing import List
 import json
-from states import AppState, BusState, Location
+from states import AppState, BusState, Location, PickupLocation, DropoffLocation
 from fastapi import FastAPI
 import uvicorn
 from fastapi import WebSocket, WebSocketDisconnect
 import logging
+import asyncio
+import httpx
+from algo.bus_logic import find_optimal_bus
 
 app = FastAPI()
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+OSRM_SERVER_URL = "http://localhost:5000"
 
 state = AppState()
 
@@ -86,37 +90,57 @@ async def websocket_driver(websocket: WebSocket):
         logger.info(f"Driver disconnected")
         pass
 
-def get_best_bus(buses: List[BusState], location: Location) -> BusState:
-    # Implement your logic to find the best bus based on location
-    return buses[0] if buses else None
+# deleted get best bus, replaced wiht find optimal bus
 
-async def get_bus(location: Location):
+async def get_bus(pickup_loc: Location, dropoff_loc: Location):
     # Query all the bus location and routes
     buses = [
         bus for bus in state.busses
         if bus.location and bus.route
     ]
-    my_bus = get_best_bus(buses, location)
+    my_bus, _ = await find_optimal_bus(
+        buses=buses,
+        pickup_loc=pickup_loc,
+        dropoff_loc=dropoff_loc,
+        osrm_url=OSRM_SERVER_URL, # Pass the config as an argument
+        logger=logger             # Pass the logger as an argument
+    )
     # Tell the bus
     if my_bus:
         data = {
             "type": "RIDE_REQUEST",
-            "location": {
-                "latitude": location.latitude,
-                "longitude": location.longitude
+            "pickup": {
+                "latitude": pickup_loc.latitude,
+                "longitude": pickup_loc.longitude
+            },
+            # RECOMMENDED CHANGE: Add the dropoff location here
+            "dropoff": {
+                "latitude": dropoff_loc.latitude,
+                "longitude": dropoff_loc.longitude
             }
         }
         await my_bus.websocket.send_text(json.dumps(data))
-        logger.info(f"Ride request sent to bus at location: {location.latitude}, {location.longitude}")
+        
+        logger.info(f"Ride request sent to bus at location: {pickup_loc.latitude}, {pickup_loc.longitude}")
         
     else:
-        logger.warning(f"No available bus found for location: {location.latitude}, {location.longitude}")
+        logger.warning(f"No available bus found for location: {pickup_loc.latitude}, {pickup_loc.longitude}")
 
 @app.get("/passenger/request_ride")
-async def request_ride(location: Location):
-    logger.info(f"Ride requested at location: {location.latitude}, {location.longitude}")
+async def request_ride(
+    pickup_lat: float, 
+    pickup_lon: float,
+    dropoff_lat: float,
+    dropoff_lon: float
+):
+    logger.info(f"Ride requested at location: ({pickup_lat}, {pickup_lon})")
 
-    await get_bus(location)
+    # FIXED: Create location objects from the coordinates provided in the request.
+    pickup_location = PickupLocation(latitude=pickup_lat, longitude=pickup_lon)
+    dropoff_location = DropoffLocation(latitude=dropoff_lat, longitude=dropoff_lon)
+
+    # FIXED: The call to get_bus now passes both locations.
+    await get_bus(pickup_location, dropoff_location)
 
 
 if __name__ == "__main__":

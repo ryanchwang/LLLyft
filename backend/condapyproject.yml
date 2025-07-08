@@ -1,0 +1,12 @@
+# pyproject.yml
+name: pyproject
+channels:
+  - conda-forge
+dependencies:
+  - "python>=3.11"
+  - "fastapi>=0.115.0"
+  - "httpx>=0.28.1"
+  - "pytest>=8.4.1"
+  - "pytest-asyncio>=1.0.0"
+  - "uvicorn>=0.35.0"
+  - "websockets>=15.0.1"

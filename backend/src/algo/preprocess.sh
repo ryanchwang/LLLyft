@@ -5,16 +5,16 @@
 
 # --- Configuration ---
 # Path to your local OSM PBF file
-LOCAL_OSM_PBF_PATH="/LLLyft/frontend/public/maps/map.osm"
+LOCAL_OSM_PBF_PATH="/Users/ryanwang/Documents/GitHub/LLLyft/frontend/public/maps/map.osm"
 # Name for the generated OSRM files (without .osm.pbf extension)
 # This will be the base name for files inside the DATA_DIR (e.g., map.osrm)
 MAP_BASE_NAME="map"
 # Default OSRM profile (car, bike, foot - must exist in /opt inside the Docker image)
 OSRM_PROFILE="/opt/car.lua"
 # Directory to store OSRM data files (relative to where the script is run)
-DATA_DIR="osrm_data"
+DATA_DIR="backend/src/algo/osrm_data"
 # OSRM backend Docker image
-OSRM_DOCKER_IMAGE="ghcr.io/project-osrm/osrm-backend"
+OSRM_DOCKER_IMAGE="osrm/osrm-backend"
 
 # --- Functions ---
 
@@ -41,7 +41,7 @@ run_osrm_command() {
     echo "Docker command: docker run -t -v \"${PWD}/${DATA_DIR}:/data\" $OSRM_DOCKER_IMAGE ${osrm_full_command[@]}"
 
     # Mount only DATA_DIR, as the PBF will be copied there first.
-    docker run -t \
+    docker run -t --platform linux/amd64 \
       -v "${PWD}/${DATA_DIR}:/data" \
       "$OSRM_DOCKER_IMAGE" "${osrm_full_command[@]}" || handle_error "${osrm_full_command[0]} failed."
     echo "${osrm_full_command[0]} completed successfully."

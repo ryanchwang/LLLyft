@@ -1,13 +1,14 @@
 #!/bin/bash
 
 # This script automates the OSRM data preprocessing using Docker.
-# It downloads an OSM PBF extract, runs osrm-extract, osrm-partition, and osrm-customize.
+# It uses an existing local OSM PBF extract and runs osrm-extract, osrm-partition, and osrm-customize.
 
 # --- Configuration ---
-# Default map URL (e.g., Berlin from Geofabrik)
-MAP_URL="http://download.geofabrik.de/europe/germany/berlin-latest.osm.pbf"
-# Default map name (without .osm.pbf extension)
-MAP_NAME="berlin-latest"
+# Path to your local OSM PBF file
+LOCAL_OSM_PBF_PATH="/LLLyft/frontend/public/maps/map.osm"
+# Name for the generated OSRM files (without .osm.pbf extension)
+# This will be the base name for files inside the DATA_DIR (e.g., map.osrm)
+MAP_BASE_NAME="map"
 # Default OSRM profile (car, bike, foot - must exist in /opt inside the Docker image)
 OSRM_PROFILE="/opt/car.lua"
 # Directory to store OSRM data files (relative to where the script is run)
@@ -31,26 +32,19 @@ check_docker() {
     echo "Docker is running."
 }
 
-# Function to download the PBF file
-download_map() {
-    local url=$1
-    local output_file=$2
-    echo "Downloading map from $url to $output_file..."
-    wget -c -O "$output_file" "$url" || handle_error "Failed to download map file."
-    echo "Map downloaded successfully."
-}
-
 # Function to run OSRM Docker command
+# Arguments are the full command to execute inside the container (e.g., "osrm-extract -p /opt/car.lua /data/map.osm")
 run_osrm_command() {
-    local command_name=$1
-    shift # Remove the first argument (command_name)
-    local docker_command="$@" # Remaining arguments are the actual docker command parts
+    local osrm_full_command=("$@") # All arguments are now treated as the full command for OSRM
 
-    echo "Running OSRM command: $command_name"
-    echo "Docker command: docker run -t -v \"${PWD}/${DATA_DIR}:/data\" $OSRM_DOCKER_IMAGE $docker_command"
+    echo "Running OSRM command: ${osrm_full_command[0]}" # Print the first part of the command (e.g., osrm-extract)
+    echo "Docker command: docker run -t -v \"${PWD}/${DATA_DIR}:/data\" $OSRM_DOCKER_IMAGE ${osrm_full_command[@]}"
 
-    docker run -t -v "${PWD}/${DATA_DIR}:/data" "$OSRM_DOCKER_IMAGE" "$docker_command" || handle_error "$command_name failed."
-    echo "$command_name completed successfully."
+    # Mount only DATA_DIR, as the PBF will be copied there first.
+    docker run -t \
+      -v "${PWD}/${DATA_DIR}:/data" \
+      "$OSRM_DOCKER_IMAGE" "${osrm_full_command[@]}" || handle_error "${osrm_full_command[0]} failed."
+    echo "${osrm_full_command[0]} completed successfully."
 }
 
 # --- Main Script ---
@@ -61,29 +55,36 @@ echo "--- OSRM Preprocessing Script ---"
 mkdir -p "${DATA_DIR}" || handle_error "Failed to create data directory ${DATA_DIR}."
 echo "Data directory ${DATA_DIR} ensured."
 
-# Change to data directory to simplify paths for Docker mounts (optional, but clean)
-# cd "${DATA_DIR}" || handle_error "Failed to change to data directory."
-
 check_docker
 
-# 1. Download OpenStreetMap PBF extract
-OSM_FILE="${DATA_DIR}/${MAP_NAME}.osm"
-if [ ! -f "$OSM_FILE" ]; then
-    download_map "$MAP_URL" "$PBF_FILE"
-else
-    echo "Map file '$PBF_FILE' already exists. Skipping download. To re-download, delete the file first."
+# Define the path for the PBF file *inside* the data directory
+PBF_FILE_IN_DATA_DIR="${DATA_DIR}/${MAP_BASE_NAME}.osm" # Keep the .osm extension here
+
+# Verify the local PBF file exists before copying
+if [ ! -f "${LOCAL_OSM_PBF_PATH}" ]; then
+    handle_error "Local OSM PBF file not found at: ${LOCAL_OSM_PBF_PATH}"
 fi
+echo "Using local OSM PBF file: ${LOCAL_OSM_PBF_PATH}"
 
-# 2. Run osrm-extract
-run_osrm_command "osrm-extract" "osrm-extract -p ${OSRM_PROFILE} /data/${MAP_NAME}.osm.pbf"
+# 0. Copy the OSM PBF file into the OSRM data directory
+echo "Copying ${LOCAL_OSM_PBF_PATH} to ${PBF_FILE_IN_DATA_DIR}..."
+cp "${LOCAL_OSM_PBF_PATH}" "${PBF_FILE_IN_DATA_DIR}" || handle_error "Failed to copy PBF file to data directory."
+echo "PBF file copied successfully."
 
-# 3. Run osrm-partition (for MLD)
-run_osrm_command "osrm-partition" "osrm-partition /data/${MAP_NAME}.osrm"
+# The OSRM commands will now operate entirely within the /data directory inside the container.
+# The base name for all OSRM files will be map.osrm
 
-# 4. Run osrm-customize (for MLD)
-run_osrm_command "osrm-customize" "osrm-customize /data/${MAP_NAME}.osrm"
+# 1. Run osrm-extract
+# Input: /data/map.osm, Output will be /data/map.osrm (implicit)
+run_osrm_command "osrm-extract" "/data/${MAP_BASE_NAME}.osm" "-p" "${OSRM_PROFILE}"
+
+# 2. Run osrm-partition (for MLD)
+run_osrm_command "osrm-partition" "/data/${MAP_BASE_NAME}.osrm"
+
+# 3. Run osrm-customize (for MLD)
+run_osrm_command "osrm-customize" "/data/${MAP_BASE_NAME}.osrm"
 
 echo "--- OSRM Preprocessing Complete! ---"
 echo "OSRM data files are located in: ${PWD}/${DATA_DIR}"
 echo "You can now start osrm-routed with: "
-echo "docker run -t -i -p 5000:5000 -v \"${PWD}/${DATA_DIR}:/data\" ${OSRM_DOCKER_IMAGE} osrm-routed --algorithm mld /data/${MAP_NAME}.osrm"
+echo "docker run -t -i -p 5000:5000 -v \"${PWD}/${DATA_DIR}:/data\" ${OSRM_DOCKER_IMAGE} osrm-routed --algorithm mld /data/${MAP_BASE_NAME}.osrm"
